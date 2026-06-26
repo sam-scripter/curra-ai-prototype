@@ -7,6 +7,9 @@ from dotenv import load_dotenv
 from database import Base, engine, check_db_connection
 import models  # noqa: F401
 
+# Import the ingestion router — registers POST /api/ingest
+from routers.ingest import router as ingest_router
+
 load_dotenv()
 
 app = FastAPI(
@@ -23,6 +26,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Register all routers with the app.
+# Any route defined in routers/ingest.py is now accessible on this server.
+app.include_router(ingest_router)
+
 
 @app.on_event("startup")
 async def startup():
@@ -31,9 +38,8 @@ async def startup():
 
 
 def check_redis_connection() -> bool:
-    """Pings Redis to confirm it is reachable."""
     try:
-        redis_url = os.getenv("REDIS_URL", "redis://localhost:6380")
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
         r = redis_client.from_url(redis_url)
         r.ping()
         return True
@@ -49,34 +55,20 @@ async def health():
 @app.get("/health/db", tags=["Health"])
 async def health_db():
     ok = check_db_connection()
-    return {
-        "status": "ok" if ok else "error",
-        "database": "connected" if ok else "unreachable"
-    }
+    return {"status": "ok" if ok else "error", "database": "connected" if ok else "unreachable"}
 
 
 @app.get("/health/redis", tags=["Health"])
 async def health_redis():
-    """Confirms Redis is reachable. Redis will cache repeated queries
-    in Phase 3 and store session history in Phase 4."""
     ok = check_redis_connection()
-    return {
-        "status": "ok" if ok else "error",
-        "redis": "connected" if ok else "unreachable"
-    }
+    return {"status": "ok" if ok else "error", "redis": "connected" if ok else "unreachable"}
 
 
 @app.get("/health/all", tags=["Health"])
 async def health_all():
-    """Single call to check all three services at once.
-    Useful before running a demo to confirm everything is up."""
     db_ok    = check_db_connection()
     redis_ok = check_redis_connection()
     return {
         "status": "ok" if (db_ok and redis_ok) else "degraded",
-        "checks": {
-            "api":      True,
-            "database": db_ok,
-            "redis":    redis_ok,
-        }
+        "checks": {"api": True, "database": db_ok, "redis": redis_ok}
     }
