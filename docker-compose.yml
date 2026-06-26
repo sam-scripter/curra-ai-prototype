@@ -9,15 +9,24 @@ services:
       POSTGRES_USER: curra_user
       POSTGRES_PASSWORD: curra_pass
     ports:
-      # 5433 externally to avoid clashing with any local PostgreSQL instance.
       - "5433:5432"
     volumes:
-      # Named volume: PostgreSQL data persists across docker compose down/up cycles.
       - curra_pgdata:/var/lib/postgresql/data
-      # init.sql runs once on first container creation to enable pgvector.
       - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U curra_user -d curra_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: curra_redis
+    ports:
+      # 6380 externally to avoid clashing with any local Redis instance.
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -31,12 +40,10 @@ services:
     volumes:
       - ./backend:/app
       - ./knowledge:/app/knowledge
-    # depends_on with service_healthy means Docker waits for the db
-    # healthcheck to pass before starting the backend.
-    # Without this the backend starts immediately, tries to connect
-    # to a PostgreSQL that isn't ready, and crashes.
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
