@@ -66,3 +66,32 @@ class Gap(Base):
     unit_namespace = Column(String, nullable=False, default="curra_dav_2026_s1")
     confidence     = Column(Float, nullable=False)  # the best similarity score achieved (0.0 – 1.0)
     asked_at       = Column(DateTime(timezone=True), server_default=func.now())
+
+class PracticeQuestion(Base):
+    """
+    A practice question extracted or generated from the course knowledge base.
+
+    Questions come from two sources:
+    - 'extracted': questions that appear explicitly in uploaded materials
+      (activity questions, check-your-understanding prompts on slides)
+    - 'generated': exam-style questions GPT-4o creates from the content
+
+    Both types are stored identically. The question_type column lets
+    the frontend label them differently if needed.
+
+    expected_answer is the model answer sourced from the materials.
+    It is stored here so evaluation does not need to re-derive it
+    every time a student submits an answer.
+    """
+    __tablename__ = "practice_questions"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    question_text   = Column(Text, nullable=False)
+    expected_answer = Column(Text, nullable=True)
+    topic           = Column(String, nullable=True)
+    source_document = Column(String, nullable=True)
+    page_number     = Column(Integer, nullable=True)
+    # 'extracted' | 'generated'
+    question_type   = Column(String, nullable=False, default="generated")
+    unit_namespace  = Column(String, nullable=False, default="curra_dav_2026_s1")
+    created_at      = Column(DateTime(timezone=True), server_default=func.now())

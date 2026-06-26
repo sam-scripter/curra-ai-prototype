@@ -10,6 +10,9 @@ import models  # noqa: F401
 # Import the ingestion router — registers POST /api/ingest
 from routers.ingest import router as ingest_router
 from routers.chat import router as chat_router
+from routers.revision import router as revision_router
+from routers.practice import router as practice_router
+from routers.lookup   import router as lookup_router
 
 load_dotenv()
 
@@ -31,6 +34,9 @@ app.add_middleware(
 # Any route defined in routers/ingest.py is now accessible on this server.
 app.include_router(ingest_router)
 app.include_router(chat_router)
+app.include_router(revision_router)
+app.include_router(practice_router)
+app.include_router(lookup_router)
 
 
 @app.on_event("startup")
