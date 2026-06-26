@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: curra_backend
+    env_file: .env
+    ports:
+      # 8001 on your machine maps to 8000 inside the container.
+      # We use 8001 externally to avoid clashing with other running services.
+      - "8001:8000"
+    volumes:
+      # Volume-mount the backend folder so code changes reflect instantly
+      # without rebuilding the container (--reload in the CMD handles this).
+      - ./backend:/app
+      # Mount the knowledge folder so uploaded files are accessible to the backend.
+      - ./knowledge:/app/knowledge
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
