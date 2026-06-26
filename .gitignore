@@ -1,0 +1,31 @@
+# Environment — never commit a filled .env
+.env
+*.env.local
+.env.production
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Node
+node_modules/
+.next/
+out/
+
+# Knowledge base — raw files stay local, not in git
+knowledge/*
+!knowledge/.gitkeep
+
+# Editor and OS
+.DS_Store
+.idea/
+.vscode/
+*.log
