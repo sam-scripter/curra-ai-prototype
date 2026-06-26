@@ -1,0 +1,11 @@
+/* 
+  globals.css — base styles applied across the entire application.
+  
+  We keep this minimal: just Tailwind's three directive imports
+  which inject the utility classes, base resets, and component styles.
+  All actual styling is done with Tailwind classes directly in components.
+*/
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
