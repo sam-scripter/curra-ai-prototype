@@ -95,3 +95,8 @@ class PracticeQuestion(Base):
     question_type   = Column(String, nullable=False, default="generated")
     unit_namespace  = Column(String, nullable=False, default="curra_dav_2026_s1")
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
+    # Embedding of the question text itself — used at query time to detect
+    # when a student is asking a class activity question.
+    # Only populated for question_type='class_activity'.
+    # Regular generated/extracted questions leave this null.
+    question_embedding = Column(Vector(1536), nullable=True)

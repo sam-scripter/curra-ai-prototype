@@ -1,11 +1,90 @@
-/* 
-  globals.css — base styles applied across the entire application.
-  
-  We keep this minimal: just Tailwind's three directive imports
-  which inject the utility classes, base resets, and component styles.
-  All actual styling is done with Tailwind classes directly in components.
-*/
+@import "tailwindcss";
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* ── Custom color palette ────────────────────────────────────────────────── */
+/*
+  In Tailwind v4, custom colors are defined here with @theme rather than
+  in tailwind.config.ts. The --color-{name}-{shade} naming convention
+  maps directly to bg-teal-600, text-rust-400 etc. in your components.
+*/
+@theme {
+  --color-teal-950: #0a1f1e;
+  --color-teal-900: #0d2b29;
+  --color-teal-800: #132e2c;
+  --color-teal-700: #1a3f3c;
+  --color-teal-600: #0f766e;
+  --color-teal-500: #14b8a6;
+  --color-teal-400: #2dd4bf;
+  --color-teal-300: #5eead4;
+  --color-teal-200: #99f6e4;
+  --color-teal-100: #ccfbf1;
+  --color-teal-50:  #f0fdfa;
+
+  --color-rust-900: #431407;
+  --color-rust-800: #7c2d12;
+  --color-rust-700: #9a3412;
+  --color-rust-600: #c2410c;
+  --color-rust-500: #ea580c;
+  --color-rust-400: #fb923c;
+  --color-rust-300: #fdba74;
+  --color-rust-100: #ffedd5;
+}
+
+/* ── Base styles ─────────────────────────────────────────────────────────── */
+html, body {
+  background-color: #0a1f1e;
+  color: #ccfbf1;
+}
+
+/* ── Custom scrollbar ────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: #132e2c; }
+::-webkit-scrollbar-thumb {
+  background: rgba(20, 184, 166, 0.25);
+  border-radius: 2px;
+}
+
+/* ── Markdown prose inside AI responses ──────────────────────────────────── */
+.prose-curra p {
+  color: #ccfbf1;
+  line-height: 1.7;
+  margin-bottom: 0.75rem;
+}
+.prose-curra p:last-child { margin-bottom: 0; }
+.prose-curra h1, .prose-curra h2, .prose-curra h3 {
+  color: #ccfbf1;
+  font-weight: 500;
+  margin: 1rem 0 0.5rem;
+}
+.prose-curra ul, .prose-curra ol {
+  padding-left: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+.prose-curra li {
+  margin-bottom: 0.3rem;
+  line-height: 1.65;
+  color: #ccfbf1;
+}
+.prose-curra strong {
+  color: #ccfbf1;
+  font-weight: 500;
+}
+.prose-curra code {
+  background: rgba(20, 184, 166, 0.1);
+  color: #2dd4bf;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.875em;
+}
+.prose-curra pre {
+  background: #0d2b29;
+  border: 1px solid rgba(20, 184, 166, 0.12);
+  border-radius: 8px;
+  padding: 12px 16px;
+  overflow-x: auto;
+  margin-bottom: 0.75rem;
+}
+.prose-curra pre code {
+  background: none;
+  padding: 0;
+  color: #5eead4;
+}

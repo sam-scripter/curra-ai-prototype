@@ -78,6 +78,7 @@ def retrieve_chunks(
     unit_namespace: str,
     db: Session,
     top_k: int = 5,
+    query_embedding: list[float] | None = None,
 ) -> list[RetrievedChunk]:
     """
     Find the top_k most semantically similar chunks for a given query.
@@ -96,6 +97,9 @@ def retrieve_chunks(
         db:             SQLAlchemy session
         top_k:          Number of chunks to return (default 5)
 
+        query_embedding: Optional pre-computed embedding. If provided, the
+                     query is not re-embedded — saves one API call when
+                     the embedding was already computed for classification.
     Returns:
         List of RetrievedChunk dicts ordered by similarity score descending.
         Empty list if the knowledge base has no chunks.
@@ -103,8 +107,10 @@ def retrieve_chunks(
     # Embed the query into a vector
     query_vector = embed_query(query)
 
+    # Use the provided embedding or compute a fresh one
+    vector = query_embedding if query_embedding is not None else embed_query(query)
     # pgvector expects the vector as a string: "[0.12, -0.34, ...]"
-    embedding_str = "[" + ",".join(map(str, query_vector)) + "]"
+    embedding_str = "[" + ",".join(map(str, vector)) + "]"
 
     # Cosine distance search.
     # <=> is pgvector's cosine distance operator (distance = 1 - similarity).

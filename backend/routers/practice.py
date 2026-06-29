@@ -151,6 +151,120 @@ def extract_questions(
     return {"questions_created": total_created, "status": "success"}
 
 
+@router.post("/extract-class-activities")
+def extract_class_activities(
+    force: bool = False,
+    db: Session = Depends(get_db),
+):
+    """
+    Extract questions from ingested materials and mark them as class activities.
+
+    Unlike /extract which generates study questions, this endpoint specifically
+    finds explicit questions in the knowledge base — the kind a lecturer writes
+    on a slide with the expectation that students work through them in class.
+
+    Each extracted question is:
+    1. Stored with question_type='class_activity'
+    2. Embedded so it can be detected at query time via similarity search
+
+    When a student later asks a question matching one of these above a
+    similarity threshold, the system enters Socratic mode instead of
+    answering directly.
+    """
+    from openai import OpenAI as _OpenAI
+    _client = _OpenAI()
+
+    existing = db.query(PracticeQuestion).filter(
+        PracticeQuestion.unit_namespace == UNIT_NAMESPACE,
+        PracticeQuestion.question_type == "class_activity"
+    ).count()
+
+    if existing > 0 and not force:
+        return {
+            "questions_created": 0,
+            "existing": existing,
+            "status":  "skipped",
+            "message": "Class activities already extracted. Pass force=true to re-extract."
+        }
+
+    # Fetch chunks — look for content with explicit question patterns
+    rows = db.execute(text("""
+        SELECT c.content, c.page_number, d.filename
+        FROM chunks c
+        JOIN documents d ON c.document_id = d.id
+        WHERE c.unit_namespace = :namespace
+        ORDER BY c.chunk_index
+    """), {"namespace": UNIT_NAMESPACE}).fetchall()
+
+    if not rows:
+        raise HTTPException(status_code=404, detail="No content in knowledge base.")
+
+    total_created = 0
+
+    for i in range(0, len(rows), CHUNK_BATCH):
+        batch = rows[i:i + CHUNK_BATCH]
+        batch_context = "\n\n---\n\n".join(
+            f"[Page {row.page_number}]\n{row.content}"
+            for row in batch
+        )
+
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are analysing lecture slides for a Data Analytics course. "
+                        "Extract ONLY explicit class activity questions — questions the "
+                        "lecturer wrote for students to work on during or after class. "
+                        "These are typically labelled 'Activity', 'Exercise', 'Question', "
+                        "'Task', or phrased as direct instructions to the student. "
+                        "Do NOT include rhetorical questions or discussion prompts. "
+                        "Return ONLY valid JSON: "
+                        "{\"questions\": [{\"question_text\": \"string\", \"topic\": \"string\"}]}"
+                        "If no class activity questions exist in this batch, return {\"questions\": []}"
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": f"Extract class activity questions from:\n\n{batch_context}"
+                }
+            ],
+            temperature=0.1,
+            response_format={"type": "json_object"},
+        )
+
+        data = json.loads(response.choices[0].message.content)
+        questions = data.get("questions", [])
+
+        for q in questions:
+            if not q.get("question_text"):
+                continue
+
+            question_text = q["question_text"]
+
+            # Embed the question text so it can be matched at query time
+            embedding_response = _client.embeddings.create(
+                model="text-embedding-3-small",
+                input=question_text,
+            )
+            question_embedding = embedding_response.data[0].embedding
+
+            db.add(PracticeQuestion(
+                question_text=question_text,
+                expected_answer=None,       # We deliberately do not store answers
+                topic=q.get("topic"),
+                source_document=batch[0].filename,
+                page_number=batch[0].page_number,
+                question_type="class_activity",
+                unit_namespace=UNIT_NAMESPACE,
+                question_embedding=question_embedding,
+            ))
+            total_created += 1
+
+    db.commit()
+    return {"questions_created": total_created, "status": "success"}
+
 @router.get("/questions")
 def list_questions(db: Session = Depends(get_db)):
     """

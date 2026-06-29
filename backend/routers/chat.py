@@ -38,8 +38,9 @@ from dotenv import load_dotenv
 
 from database import get_db
 from models import Gap
-from services.retriever import retrieve_chunks, get_confidence_label
+from services.retriever import retrieve_chunks, get_confidence_label, embed_query
 from services.generator import stream_answer
+from services.classifier import detect_class_activity, detect_question_type
 
 load_dotenv()
 
@@ -133,38 +134,70 @@ async def chat(
 
     Pipeline:
         1. Load conversation history from Redis
-        2. Retrieve top 5 relevant chunks from pgvector
-        3. Determine confidence label from similarity scores
-        4. Log to gaps table if confidence is Low
-        5. Stream GPT-4o answer as Server-Sent Events
-        6. Save the new exchange to Redis after streaming completes
+        2. Embed the query once (reused for detection + retrieval)
+        3. Class activity detection — overrides mode if matched
+        4. Retrieve top 5 relevant chunks from pgvector
+        5. Compute confidence label, log gap if Low
+        6. Stream GPT-4o answer as Server-Sent Events
+        7. Save the new exchange to Redis after streaming completes
 
     Returns:
         StreamingResponse (text/event-stream) — the SSE stream.
     """
-    # Validate mode — silently fall back to free for unrecognised values
+    # Validate mode — silently fall back to free for unrecognised values.
+    # Socratic modes are set internally and never come from the request.
     valid_modes = {"free", "revision", "deepdive", "practice", "lookup"}
     mode = request.mode if request.mode in valid_modes else "free"
 
     # Step 1 — Load history
     history = load_history(request.session_id)
 
-    # Step 2 — Retrieve relevant chunks from pgvector
+    # Step 2 — Embed the query once.
+    # We reuse this embedding for both class activity detection and
+    # chunk retrieval, avoiding two separate OpenAI embedding API calls.
+    query_embedding = embed_query(request.message)
+
+    # Step 3 — Class activity detection.
+    # Check before anything else. If the question matches a stored class
+    # activity above the 0.85 threshold, we override the requested mode
+    # with the appropriate Socratic variant regardless of what the student
+    # selected.
+    is_activity, activity_score, matched_question = detect_class_activity(
+        query_embedding=query_embedding,
+        db=db,
+    )
+
+    if is_activity:
+        # Determine which Socratic variant to use based on question phrasing
+        question_type = detect_question_type(request.message)
+        if question_type == "code":
+            mode = "code_guide"       # Programming exercise — guide through logic
+        elif question_type == "video":
+            mode = "socratic_video"   # Video-dependent — acknowledge gap, guide
+        else:
+            mode = "socratic"         # Knowledge question — Socratic guidance
+
+    # Step 4 — Retrieve the top 5 most relevant chunks from pgvector.
+    # Pass the pre-computed embedding so the retriever doesn't re-embed
+    # the query — saves one API call per request.
     chunks = retrieve_chunks(
         query=request.message,
         unit_namespace=UNIT_NAMESPACE,
         db=db,
+        query_embedding=query_embedding,
     )
 
-    # Step 3 — Confidence label
+    # Step 5 — Confidence label and gap logging.
+    # confidence_label must be derived before it is used in the meta event
+    # and the gap log. top_score is the similarity score of the best match.
     confidence_label = get_confidence_label(chunks)
     top_score = chunks[0]["score"] if chunks else 0.0
 
-    # Step 4 — Log gap if Low confidence
     if confidence_label == "Low":
         log_gap(query=request.message, confidence_score=top_score, db=db)
 
-    # Build source list for the meta event
+    # Build source list for the meta event — sent before the first token
+    # so the frontend can render citations immediately.
     sources = [
         {
             "filename":    c["filename"],
@@ -189,8 +222,10 @@ async def chat(
         """
         full_answer = ""
 
-        # Meta event first — client can render citations while answer streams
-        yield f"data: {json.dumps({'type': 'meta', 'confidence': confidence_label, 'sources': sources})}\n\n"
+        # Meta event first — client can render citations while answer streams.
+        # Also includes the active mode so the frontend knows if Socratic
+        # mode was triggered.
+        yield f"data: {json.dumps({'type': 'meta', 'confidence': confidence_label, 'sources': sources, 'mode': mode})}\n\n"
 
         # Stream tokens from GPT-4o
         async for token in stream_answer(
@@ -202,10 +237,10 @@ async def chat(
             full_answer += token
             yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
 
-        # Done event
+        # Done event — signals the client to close the EventSource connection
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
-        # Step 6 — Persist this exchange to Redis
+        # Step 7 — Persist this exchange to Redis.
         # Done here (after streaming) so we have the complete answer text.
         updated_history = history + [
             {"role": "user",      "content": request.message},
@@ -218,9 +253,9 @@ async def chat(
         media_type="text/event-stream",
         headers={
             # Prevent proxies and browsers from buffering SSE events.
-            # Without these, some environments batch events and the
-            # streaming effect is completely lost.
-            "Cache-Control":    "no-cache",
+            # Without these headers some environments batch events and
+            # the streaming effect is completely lost.
+            "Cache-Control":     "no-cache",
             "X-Accel-Buffering": "no",
         },
     )
