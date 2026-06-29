@@ -67,6 +67,29 @@ class Gap(Base):
     confidence     = Column(Float, nullable=False)  # the best similarity score achieved (0.0 – 1.0)
     asked_at       = Column(DateTime(timezone=True), server_default=func.now())
 
+class QueryLog(Base):
+    """
+    One row per student query across all study modes.
+
+    Logs every question regardless of confidence level.
+    Used by the lecturer demo dashboard to show:
+      - Total queries run in this knowledge base
+      - Confidence distribution (High / Medium / Low breakdown)
+      - Query volume over time
+
+    Distinct from the gaps table, which only records Low confidence
+    queries and is shown as curriculum intelligence to the lecturer.
+    The query log is for aggregate statistics only.
+    """
+    __tablename__ = "query_logs"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    query          = Column(Text, nullable=False)
+    confidence     = Column(String, nullable=False)   # "High", "Medium", or "Low"
+    mode           = Column(String, nullable=True)    # which study mode was active
+    unit_namespace = Column(String, nullable=False, default="curra_dav_2026_s1")
+    asked_at       = Column(DateTime(timezone=True), server_default=func.now())
+
 class PracticeQuestion(Base):
     """
     A practice question extracted or generated from the course knowledge base.

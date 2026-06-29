@@ -13,6 +13,7 @@ from routers.chat import router as chat_router
 from routers.revision import router as revision_router
 from routers.practice import router as practice_router
 from routers.lookup   import router as lookup_router
+from routers.demo import router as demo_router
 
 load_dotenv()
 
@@ -37,7 +38,7 @@ app.include_router(chat_router)
 app.include_router(revision_router)
 app.include_router(practice_router)
 app.include_router(lookup_router)
-
+app.include_router(demo_router)
 
 @app.on_event("startup")
 async def startup():

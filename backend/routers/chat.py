@@ -41,6 +41,7 @@ from models import Gap
 from services.retriever import retrieve_chunks, get_confidence_label, embed_query
 from services.generator import stream_answer
 from services.classifier import detect_class_activity, detect_question_type
+from models import Gap, QueryLog
 
 load_dotenv()
 
@@ -123,6 +124,28 @@ def log_gap(query: str, confidence_score: float, db: Session) -> None:
     db.add(gap)
     db.commit()
 
+def log_query(
+    query: str,
+    confidence: str,
+    mode: str,
+    db: Session,
+) -> None:
+    """
+    Write every query to the query_logs table regardless of confidence.
+
+    Called after confidence is determined on every /api/chat request.
+    Provides the aggregate data the lecturer demo dashboard uses to
+    show confidence distribution and total query volume.
+    """
+    entry = QueryLog(
+        query=query,
+        confidence=confidence,
+        mode=mode,
+        unit_namespace=UNIT_NAMESPACE,
+    )
+    db.add(entry)
+    db.commit()
+
 
 @router.post("/chat")
 async def chat(
@@ -195,6 +218,9 @@ async def chat(
 
     if confidence_label == "Low":
         log_gap(query=request.message, confidence_score=top_score, db=db)
+
+    # Log every query for dashboard statistics
+    log_query(query=request.message, confidence=confidence_label, mode=mode, db=db)
 
     # Build source list for the meta event — sent before the first token
     # so the frontend can render citations immediately.
